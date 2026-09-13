@@ -6,6 +6,7 @@ import {
   analyze,
   formatReport,
 } from './moduleGraph';
+import { recordHit } from './reviewPrompt';
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -49,7 +50,7 @@ async function readText(uri: vscode.Uri): Promise<string> {
   return Buffer.from(bytes).toString('utf8');
 }
 
-async function analyzeWorkspace(): Promise<void> {
+async function analyzeWorkspace(context: vscode.ExtensionContext): Promise<void> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
     void vscode.window.showErrorMessage('Circular Dependency Companion: open a folder/workspace first.');
@@ -95,6 +96,12 @@ async function analyzeWorkspace(): Promise<void> {
   channel.appendLine(formatReport(result));
   channel.show(true);
 
+  // A real analysis actually ran: settings.gradle(.kts) was found and
+  // parsed into at least one module (every early-return above for a
+  // missing workspace/settings file/empty module list happens before
+  // this point, so this never fires for a failed or empty run).
+  recordHit(context);
+
   if (result.cycles.length > 0) {
     void vscode.window.showWarningMessage(
       `Circular Dependency Companion: ${result.cycles.length} circular dependency/ies found. See the output channel.`,
@@ -104,7 +111,7 @@ async function analyzeWorkspace(): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   const command = vscode.commands.registerCommand('circularDependencyCompanion.analyze', () => {
-    void analyzeWorkspace();
+    void analyzeWorkspace(context);
   });
   context.subscriptions.push(command);
 }
